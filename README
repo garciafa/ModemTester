@@ -1,0 +1,12 @@
+ModemTester allows one to script tests on boost::asio managed devices.
+
+It can be used on serial ports or even on tcp sockets, unix sockets, ...
+
+It uses two modes of test: availability and throughput.
+
+In availability mode the master sends one byte of data regularly which is sent back by the remote.
+Loss ratio and average RTT are then computed.
+
+In throughput mode the master sends data as fast as possible. When it requires results, the remote
+then sends back the number of bytes receives in which amount of time.
+

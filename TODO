@@ -1,0 +1,8 @@
+GENERAL:
+    - Use a logging system so as to let the client program decide what level of info is printed
+
+    - Add documentation
+
+Throughput testing:
+    - Make a simple protocol to test all data was received by master and send the throughput profile rather than the total
+
