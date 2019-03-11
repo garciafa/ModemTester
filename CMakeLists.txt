@@ -68,5 +68,5 @@ target_link_libraries(testRemoteFSM ${Boost_LIBRARIES} stdc++fs pthread)
 #add_executable(testAsyncIO src/AISO.h src/tests/testAsyncIO.cpp src/TimeLogger.cpp src/TimeLogger.h)
 #target_link_libraries(testAsyncIO ${Boost_LIBRARIES} stdc++fs pthread)
 
-#add_executable(testTimerCancel src/TimeLogger.cpp src/TimeLogger.h src/tests/testTimerCancel.cpp)
-#target_link_libraries(testTimerCancel ${Boost_LIBRARIES} stdc++fs pthread)
+add_executable(testTimerCancel src/TimeLogger.cpp src/TimeLogger.h src/tests/testTimerCancel.cpp)
+target_link_libraries(testTimerCancel ${Boost_LIBRARIES} stdc++fs pthread)

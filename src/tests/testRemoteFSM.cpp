@@ -67,16 +67,6 @@ int main()
         printTimer = new boost::asio::basic_waitable_timer<TheClock>(ptr->get_io_service(), std::chrono::milliseconds(500));
         printTimer->async_wait(&printState);
 
-        /*
-    while (res)
-    {
-        res = io.run_one();
-        if (!res)
-        {
-            std::cout << "No handler executed => connection lost or no more handler registered\n";
-        }
-        }
-         */
         io.run();
     }
     catch (std::exception &e)

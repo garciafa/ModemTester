@@ -37,7 +37,7 @@ void handleTimeout(boost::system::error_code const & ec)
 {
     if (ec)
     {
-        std::cout << ec.message() << std::endl;
+        std::cout << TimeLogger::now().count() << " => " << ec.message() << std::endl;
     }
     else
     {
@@ -66,7 +66,7 @@ int main()
 
     std::thread thr(std::bind(&runIoThread,std::ref(io)));
 
-    sleep(1);
+    sleep(3);
 
     t->cancel();
 

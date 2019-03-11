@@ -45,6 +45,7 @@ public:
     void getResults ();
     void makeReport () override;
     void receiveResults (const boost::system::error_code &ec, std::size_t bytesAvailable);
+    void timeoutReceiveResults (const boost::system::error_code &ec);
 
     static void noReportingFunction (bool b,uint32_t r,uint32_t u);
 
@@ -54,6 +55,7 @@ protected:
     volatile bool _resultsReady;
     uint32_t _totalReceived;
     uint32_t _totalUsec;
+    boost::asio::basic_waitable_timer<TheClock> *_receiveResultsTimer;
 };
 
 class MasterThroughputFactory : public CommunicatingRunnableFactory<MasterThroughput> {

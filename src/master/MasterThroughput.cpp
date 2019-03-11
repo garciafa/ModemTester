@@ -54,6 +54,7 @@ void MasterThroughput::operator() ()
     while (!_stopRequested)
     {
         _ioStream->write_some(boost::asio::buffer(sendBuf,nbCodes));
+        usleep(100000);
     }
 
     endReporting();
@@ -76,6 +77,10 @@ void MasterThroughput::getResults()
 
     _ioStream->write(boost::asio::buffer(data));
 
+    // TODO needs a clean timeout !!!
+    _receiveResultsTimer = new boost::asio::basic_waitable_timer<TheClock>(_ioStream->get_io_service(),std::chrono::seconds(3));
+    _receiveResultsTimer->async_wait(std::bind(&MasterThroughput::timeoutReceiveResults,this,_1));
+
     // Wait for data to come back
     while (!_resultsReady)
     {
@@ -85,12 +90,25 @@ void MasterThroughput::getResults()
     _ioStream->async_read(boost::asio::buffer(_recvBuf,1),std::bind(&MasterThroughput::handleReceive,this,_1,_2));
 }
 
+void MasterThroughput::timeoutReceiveResults (const boost::system::error_code &ec)
+{
+    if (!ec)
+    {
+        std::cout << "Timeout waiting results => sending again\n";
+        std::array<uint8_t,1> data={EndStandardCodes};
+
+        _ioStream->write(boost::asio::buffer(data));
+
+        _receiveResultsTimer->expires_from_now(std::chrono::seconds(3));
+        _receiveResultsTimer->async_wait(std::bind(&MasterThroughput::timeoutReceiveResults,this,_1));
+    }
+}
+
 void MasterThroughput::receiveResults (const boost::system::error_code &ec, std::size_t bytesAvailable)
 {
     if (!ec)
     {
-        //std::cout << std::this_thread::get_id() << std::endl;
-        //std::cout << TimeLogger::now().count() << " # Received : " << bytesAvailable << " Bytes" << std::endl;
+        delete _receiveResultsTimer;
 
         if (bytesAvailable != 2 * sizeof(uint32_t))
             return;
@@ -113,15 +131,6 @@ void MasterThroughput::receiveResults (const boost::system::error_code &ec, std:
         }
         totalUsec = ntohl(data);
 
-        /*
-        double sec = totalUsec / 1000000.0;
-        std::cout << "----------------------------------------------" << std::endl;
-        std::cout << TimeLogger::now().count() << " # ThroughputMode report" << std::endl;
-        std::cout << "\tReceived " << totalReceived << " Bytes in " << sec << " s" << std::endl;
-        std::cout << "\tThroughput " << totalReceived / sec << " Bytes/s" << std::endl;
-        std::cout << "\tThroughput " << 8 * totalReceived / sec << " b/s" << std::endl;
-        std::cout << "----------------------------------------------" << std::endl;
-        */
         _totalUsec=totalUsec;
         _totalReceived=totalReceived;
         _gotResults=_resultsReady = true;

@@ -200,34 +200,32 @@ void BaseFSM<State_t>::HandleReadEvt(boost::system::error_code const &ec,std::si
     {
         for (size_t i = 0; i < bytesTransferred; ++i)
         {
-            if (_recvBuf[i] != '\n')
+            //std::cout << TimeLogger::now().count() << " # received " << (EventId_t)_recvBuf[i] << std::endl;
+            switch (_recvBuf[i])
             {
-                //std::cout << TimeLogger::now().count() << " # received " << (EventId_t)_recvBuf[i] << std::endl;
-                switch (_recvBuf[i])
-                {
-                    case AvailabilityModeCommand_id:
-                        BaseFSM<State_t>::dispatch(AvailabilityModeCommand());
-                        break;
-                    case ThroughputModeCommand_id:
-                        BaseFSM<State_t>::dispatch(ThroughputModeCommand());
-                        break;
-                    case EndModeCommand_id:
-                        BaseFSM<State_t>::dispatch(EndModeCommand());
-                        break;
-                    case RemoteAck_id:
-                        BaseFSM<State_t>::dispatch(RemoteAck());
-                        break;
-                    case MasterAck_id:
-                        BaseFSM<State_t>::dispatch(MasterAck());
-                        break;
-                    case EndTest_id:
-                        BaseFSM<State_t>::dispatch(EndTest());
-                        break;
-                    default:
-                        // This should not occur...
-                        std::cout << TimeLogger::now().count() << " # STRANGE THING OCCURED : Received " << (int)_recvBuf[i] << " while in "
-                                  << *BaseFSM<State_t>::current_state_ptr << " state" << std::endl;
-                }
+                case AvailabilityModeCommand_id:
+                    BaseFSM<State_t>::dispatch(AvailabilityModeCommand());
+                    break;
+                case ThroughputModeCommand_id:
+                    BaseFSM<State_t>::dispatch(ThroughputModeCommand());
+                    break;
+                case EndModeCommand_id:
+                    BaseFSM<State_t>::dispatch(EndModeCommand());
+                    break;
+                case RemoteAck_id:
+                    BaseFSM<State_t>::dispatch(RemoteAck());
+                    break;
+                case MasterAck_id:
+                    BaseFSM<State_t>::dispatch(MasterAck());
+                    break;
+                case EndTest_id:
+                    BaseFSM<State_t>::dispatch(EndTest());
+                    break;
+                default:
+                    // This should not occur...
+                    std::cout << TimeLogger::now().count() << " # STRANGE THING OCCURED : Received "
+                              << (int) _recvBuf[i] << " while in "
+                              << *BaseFSM<State_t>::current_state_ptr << " state" << std::endl;
 
             }
         }
@@ -272,6 +270,7 @@ void TimerBasedState<State_t>::startTimer (TheClock::duration const &d)
     if (_timer==nullptr)
     {
         //std::cout << TimeLogger::now().count() << " # starting timer\n";
+        //std::cout << "Timeout : " << std::chrono::duration_cast<std::chrono::duration<double>>(d).count() << " s" << std::endl;
         _timer = new boost::asio::basic_waitable_timer<TheClock>(BaseFSM<State_t>::getIoStream()->get_io_service(), d);
         _timer->async_wait(std::bind(&TimerBasedState<State_t>::dispatchTimeout, this, _1));
     }

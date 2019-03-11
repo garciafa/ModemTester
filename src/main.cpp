@@ -21,9 +21,19 @@
 #include <boost/program_options.hpp>
 #include <boost/asio.hpp>
 #include <iostream>
-#include "../old/modem_measures.h"
+#include "remote/RemoteFSM.h"
+#include "master/MasterFSM.h"
 #include "TimeLogger.h"
+#include "AISO.h"
+#include "EventsScript.h"
+
 using namespace boost::asio;
+
+FSM_INITIAL_STATE(RemoteFSM,RemoteIdle);
+FSM_INITIAL_STATE(MasterFSM,Idle);
+
+void ThroughputReportingFunction(bool valid,uint32_t received, uint32_t usecs);
+void AvailabilityReportingFunction(unsigned long sent,unsigned long lost,unsigned long received,double avRtt);
 
 int main (int argc,char** argv)
 {
@@ -86,23 +96,88 @@ int main (int argc,char** argv)
         exit(EXIT_FAILURE);
     }
 
-    io_service ioService;
-    serial_port serialPort(ioService);
+    io_service io;
+    serial_port serialPort(io);
 
     serialPort.open(serialPath);
 
     if (isRemote)
     {
-        remotePing(serialPort);
-        //remoteThroughput(serialPort);
+        try
+        {
+            RemoteFSM::setIoStream(AISOBase::CreateFromStream(serialPort));
+            RemoteFSM::start();
+
+            io.run();
+        }
+        catch (std::exception &e)
+        {
+            std::cerr << "Error in main loop : " << e.what() << std::endl;
+        }
     }
     else
     {
-        masterPing(serialPort,1,std::chrono::milliseconds(100));
-        //masterThroughput(serialPort);
+        using std::chrono::seconds;
+        try
+        {
+            MasterPingerFactory::setPingStatusPrintPeriod(seconds(0));
+            MasterPingerFactory::setReportingFunction(AvailabilityReportingFunction);
+            MasterThroughputFactory::setPingStatusPrintPeriod(seconds(0));
+            MasterThroughputFactory::setReportingFunction(ThroughputReportingFunction);
+
+            // TODO Read the script from a file
+            EventsScript<MasterFSM> eventsScript(io,true);
+            auto deadline = seconds(0);
+            eventsScript[deadline+=seconds(1)] = AvailabilityModeCommand_id;
+            eventsScript[deadline+=seconds(2)] = EndModeCommand_id;
+            eventsScript[deadline+=seconds(1)] = ThroughputModeCommand_id;
+            eventsScript[deadline+=seconds(2)] = EndModeCommand_id;
+            eventsScript[deadline+=seconds(5)] = EndTest_id;
+
+            AISOBase *ptr = AISOBase::CreateFromStream(serialPort);
+
+            TimeLogger::reset();
+            MasterFSM::setIoStream(ptr);
+            MasterFSM::start();
+            eventsScript.startScript();
+
+            unsigned long res=1;
+
+            while (res)
+            {
+                res = io.run_one();
+            }
+        }
+        catch (std::exception &e)
+        {
+            std::cerr << "Error in main loop : " << e.what() << std::endl;
+        }
     }
 
     serialPort.close();
 
     return EXIT_SUCCESS;
+}
+
+void AvailabilityReportingFunction(unsigned long sent,unsigned long lost,unsigned long received,double avRtt)
+{
+    std::cout << "----------------------------------------------" << std::endl;
+    std::cout << TimeLogger::now().count() << " # AvailabilityMode report" << std::endl;
+    std::cout << "\tSent " << sent << " bytes\n";
+    std::cout << "\tReceived " << received << " bytes\n";
+    std::cout << "\tLost " << lost << " bytes\n";
+    std::cout << "\tAvRTT " << avRtt*1000 << " ms\n";
+    std::cout << "----------------------------------------------" << std::endl;
+}
+
+void ThroughputReportingFunction(bool valid,uint32_t received, uint32_t usecs)
+{
+    double sec = usecs / 1000000.0;
+    std::cout << "----------------------------------------------" << std::endl;
+    std::cout << TimeLogger::now().count() << " # ThroughputMode report" << std::endl;
+    std::cout << "\tReceived " << received << " Bytes in " << sec << " s" << std::endl;
+    std::cout << "\tThroughput " << received / sec << " Bytes/s" << std::endl;
+    std::cout << "\tThroughput " << 8 * received / sec << " b/s" << std::endl;
+    std::cout << "----------------------------------------------" << std::endl;
+
 }
