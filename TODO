@@ -1,17 +1,13 @@
 GENERAL:
-    - Use a logging system so as to let the client program decide what level of info is printed
-
     - Add documentation
-
-Throughput testing:
-    - Make a simple protocol to test all data was received by master and send the throughput profile rather than the total
-    - Getting results needs a clean timeout (related to previous entry ?)
 
 EventsScript:
     - Add reading the script from a file
-    - Should make it possible to check if in the right state or reschedule everything so that we are (duration change to absolute to relative since previous event)
 
 main.cpp:
     - Add support for setting baud rate
     - Factorize Master / Remote behaviours
-    - In master behaviour, read the script from a file
+
+
+MasterPinger:
+    - AVAIL_THRESHOLD should be settable and not #defined

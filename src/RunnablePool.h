@@ -27,14 +27,16 @@
 
 class RunnablePool : public Runnable {
 public:
-    RunnablePool ();
+    static RunnablePool *getInstance ();
     ~RunnablePool () override;
     void operator() () override final;
     void addAndStartRunnable (Runnable *runnable);
 
 protected:
+    RunnablePool ();
     std::vector<Runnable*> _runnables;
     std::mutex _mut;
+    static RunnablePool* _instance;
 };
 
 #endif //MODEMTESTER_RUNNABLEPOOL_H

@@ -28,7 +28,7 @@
 
 void MasterErrorHandler(EventWithId const &evt)
 {
-    std::cerr << "Error : received " << evt << " in state" << *MasterFSM::current_state_ptr << std::endl;
+    BOOST_LOG_TRIVIAL(error) << "Error : received " << evt << " in state " << *MasterFSM::current_state_ptr << std::endl;
 }
 
 template<>
@@ -45,7 +45,7 @@ void Idle::react (EventWithId const &evt)
             transit<SentThroughputModeCommand>();
             break;
         case RemoteAck_id:
-            //std::cout << TimeLogger::now().count() << " # Sending MACK" << std::endl;
+            BOOST_LOG_TRIVIAL(trace) << "Sending MACK" << std::endl;
             SendByte(MasterAck_id);
             transit<Idle>();
             break;
@@ -73,7 +73,7 @@ void SentAvailableModeCommand::react (EventWithId const &evt)
 
 void SentAvailableModeCommand::entry (void)
 {
-    //std::cout << TimeLogger::now().count() << " # Sending AvailableModeCommand" << std::endl;
+    BOOST_LOG_TRIVIAL(trace) << "Sending AvailableModeCommand" << std::endl;
     SendByte(AvailabilityModeCommand_id);
     startTimer(_timeout);
     TimerBasedState<MasterStateId_t>::entry();
@@ -98,7 +98,7 @@ void SentThroughputModeCommand::react (EventWithId const &evt)
 void SentThroughputModeCommand::entry (void)
 {
     startTimer(_timeout);
-    //std::cout << TimeLogger::now().count() << " # Sending ThroughputModeCommand" << std::endl;
+    BOOST_LOG_TRIVIAL(debug) << "Sending ThroughputModeCommand" << std::endl;
     SendByte(ThroughputModeCommand_id);
     TimerBasedState<MasterStateId_t>::entry();
 }
@@ -121,7 +121,7 @@ void AvailabilityMode::react (EventWithId const &evt)
 
 void AvailabilityMode::entry (void)
 {
-    //std::cout << TimeLogger::now().count() << " # Sending MACK" << std::endl;
+    BOOST_LOG_TRIVIAL(trace) << "Sending MACK" << std::endl;
     SendByte(MasterAck_id);
     AISOBase * ioStream = getIoStream();
     assert(ioStream!= nullptr);
@@ -145,9 +145,10 @@ void ThroughputMode::react (EventWithId const &evt)
             break;
     }
 }
+
 void ThroughputMode::entry (void)
 {
-    //std::cout << TimeLogger::now().count() << " # Sending MACK" << std::endl;
+    BOOST_LOG_TRIVIAL(trace) << "Sending MACK" << std::endl;
     SendByte(MasterAck_id);
     AISOBase *ioStream = getIoStream();
     assert(ioStream != nullptr);
@@ -161,7 +162,7 @@ void WaitAckAfterEndMode::react (EventWithId const &evt)
     switch (evt.eventId())
     {
         case RemoteAck_id:
-            //std::cout << TimeLogger::now().count() << " # Sending MACK" << std::endl;
+            BOOST_LOG_TRIVIAL(trace) << "Sending MACK" << std::endl;
             SendByte(MasterAck_id);
             transit<Idle>();
             break;
@@ -176,7 +177,7 @@ void WaitAckAfterEndMode::react (EventWithId const &evt)
 
 void WaitAckAfterEndMode::entry (void)
 {
-    //std::cout << TimeLogger::now().count() << " # Sending EndModeCommand" << std::endl;
+    BOOST_LOG_TRIVIAL(trace) << "Sending EndModeCommand" << std::endl;
     SendByte(EndModeCommand_id);
     TimerBasedState<MasterStateId_t>::entry();
 }

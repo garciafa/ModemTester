@@ -24,6 +24,8 @@
 #include "MasterThroughput.h"
 #include <iostream>
 #include "MasterFSM.h"
+#include "../RunnablePool.h"
+#include "../EventsScript.h"
 
 using std::placeholders::_1;
 using std::placeholders::_2;
@@ -33,48 +35,49 @@ constexpr size_t nbCodes=(EndStandardCodes-BeginStandardCodes);
 void MasterThroughput::operator() ()
 {
     // Cancel all other operations on this stream
-    //std::cout << std::this_thread::get_id() << " # Ask to cancel"<<std::endl;
     _ioStream->cancel();
 
     // Start reading asynchronously on stream
-    //std::cout << std::this_thread::get_id() << " # Prepare handle receive"<<std::endl;
-    _ioStream->async_read(boost::asio::buffer(_recvBuf,1),std::bind(&MasterThroughput::handleReceive,this,_1,_2));
+    _ioStream->async_read(boost::asio::buffer(_recvBuf, 1), std::bind(&MasterThroughput::handleReceive, this, _1, _2));
 
     initReporting();
 
-    //_askResultsTimer = new boost::asio::basic_waitable_timer<TheClock>(_ioStream->get_io_service(),std::chrono::seconds(2));
-    //_askResultsTimer->async_wait(std::bind(&MasterThroughput::handleResultTimer,this,_1));
     std::array<uint8_t, nbCodes> sendBuf;
-    for (uint8_t byte=BeginStandardCodes;byte<EndStandardCodes;++byte)
+    for (uint8_t byte = BeginStandardCodes; byte < EndStandardCodes; ++byte)
     {
-        sendBuf[byte-BeginStandardCodes]=byte;
+        sendBuf[byte - BeginStandardCodes] = byte;
     }
 
-    // Send as fast as possible
-    while (!_stopRequested)
+    size_t totalSent = 0;
+    // Send an amount of data as fast as possible
+    for (int it = 0; it < 10 && !_stopRequested; ++it)
     {
-        _ioStream->write_some(boost::asio::buffer(sendBuf,nbCodes));
-        usleep(100000);
+        _ioStream->write_some(boost::asio::buffer(sendBuf, nbCodes));
+        totalSent += nbCodes;
     }
+    BOOST_LOG_TRIVIAL(trace) << "Done sending, will wait " << totalSent / (_estimatedThroughput / 8.0) << " s\n";
+    // Wait for data to arrive on the other side
+    usleep(1000000 * totalSent / (_estimatedThroughput / 8.0)); // 255 Bytes sent at _estimatedThroughput b/s turned in us
 
+    BOOST_LOG_TRIVIAL(trace) << "Finished wait\n";
     endReporting();
     makeReport();
+    BOOST_LOG_TRIVIAL(trace) << "Report made\n";
+
+
+    RunnablePool::getInstance()->addAndStartRunnable(new DispatchingRunnable<MasterFSM,EndModeCommand>());
 }
 
-MasterThroughput::MasterThroughput (AISOBase *ioStream,TheClock::duration pingStatusReportPeriod,ThroughputReportFunctionType reportFunction)
-: ReportingActivity(ioStream,pingStatusReportPeriod,reportFunction),_gotResults(false) ,_resultsReady(false) {}
+MasterThroughput::MasterThroughput (AISOBase *ioStream,TheClock::duration pingStatusReportPeriod,ThroughputReportFunctionType reportFunction,uint32_t estimatedThroughput)
+: ReportingActivity(ioStream,pingStatusReportPeriod,reportFunction),_gotResults(false) ,_resultsReady(false), _estimatedThroughput(estimatedThroughput) {}
 
 void MasterThroughput::getResults()
 {
     _resultsReady=false;
     std::array<uint8_t,1> data={EndStandardCodes};
 
-    //std::cout << std::this_thread::get_id() << " # Ask to cancel"<<std::endl;
     _ioStream->cancel();
-
-    //std::cout << std::this_thread::get_id() << " # Prepare receive results"<<std::endl;
     _ioStream->async_read(boost::asio::buffer(_recvBuf,_recvBuf.size()),std::bind(&MasterThroughput::receiveResults,this,_1,_2));
-
     _ioStream->write(boost::asio::buffer(data));
 
     // TODO needs a clean timeout !!!
@@ -86,7 +89,7 @@ void MasterThroughput::getResults()
     {
         usleep(5000);
     }
-    //std::cout << std::this_thread::get_id() << " # Prepare handle receive"<<std::endl;
+
     _ioStream->async_read(boost::asio::buffer(_recvBuf,1),std::bind(&MasterThroughput::handleReceive,this,_1,_2));
 }
 
@@ -96,9 +99,7 @@ void MasterThroughput::timeoutReceiveResults (const boost::system::error_code &e
     {
         std::cout << "Timeout waiting results => sending again\n";
         std::array<uint8_t,1> data={EndStandardCodes};
-
         _ioStream->write(boost::asio::buffer(data));
-
         _receiveResultsTimer->expires_from_now(std::chrono::seconds(3));
         _receiveResultsTimer->async_wait(std::bind(&MasterThroughput::timeoutReceiveResults,this,_1));
     }
@@ -111,11 +112,10 @@ void MasterThroughput::receiveResults (const boost::system::error_code &ec, std:
         delete _receiveResultsTimer;
 
         if (bytesAvailable != 2 * sizeof(uint32_t))
-            return;
+            return; // Not enought data => this will erase it, is it good ?
 
         uint32_t totalReceived = 0;
         uint32_t totalUsec = 0;
-        // TODO Make a simple protocol to test all data was received by master and send the throughput profile rather than the total
 
         uint32_t data;
         auto *ptr = (uint8_t *) &data;
@@ -189,19 +189,20 @@ void MasterThroughput::makeReport ()
 
 void MasterThroughput::noReportingFunction (bool b, uint32_t, uint32_t){}
 
-TheClock::duration MasterThroughputFactory::_pingStatusPrintPeriod = std::chrono::seconds(0);
+TheClock::duration MasterThroughputFactory::_throughputResultPrintPeriod = std::chrono::seconds(0);
 ThroughputReportFunctionType MasterThroughputFactory::_reportingFunction=&MasterThroughput::noReportingFunction;
+uint32_t MasterThroughputFactory::_estimatedThroughput = 9600;
 
 MasterThroughputFactory::MasterThroughputFactory (AISOBase *ioStream) : CommunicatingRunnableFactory(ioStream) {}
 
-const TheClock::duration &MasterThroughputFactory::getPingStatusPrintPeriod ()
+const TheClock::duration &MasterThroughputFactory::getThroughputResultPrintPeriod ()
 {
-    return _pingStatusPrintPeriod;
+    return _throughputResultPrintPeriod;
 }
 
-void MasterThroughputFactory::setPingStatusPrintPeriod (const TheClock::duration &pingStatusPrintPeriod)
+void MasterThroughputFactory::setThroughputResultPrintPeriod (const TheClock::duration &throughputResultPrintPeriod)
 {
-    _pingStatusPrintPeriod = pingStatusPrintPeriod;
+    _throughputResultPrintPeriod = throughputResultPrintPeriod;
 }
 
 void MasterThroughputFactory::setReportingFunction (const ThroughputReportFunctionType &reportingFunction)
@@ -211,6 +212,16 @@ void MasterThroughputFactory::setReportingFunction (const ThroughputReportFuncti
 
 MasterThroughput *MasterThroughputFactory::operator()()
 {
-    return new MasterThroughput(_ioStream,_pingStatusPrintPeriod,_reportingFunction);
+    return new MasterThroughput(_ioStream,_throughputResultPrintPeriod,_reportingFunction,_estimatedThroughput);
 
+}
+
+const uint32_t MasterThroughputFactory::getEstimatedThroughput ()
+{
+    return _estimatedThroughput;
+}
+
+void MasterThroughputFactory::setEstimatedThroughput (const uint32_t &estimatedThroughput)
+{
+    _estimatedThroughput = estimatedThroughput;
 }

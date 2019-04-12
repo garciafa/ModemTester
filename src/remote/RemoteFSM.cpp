@@ -51,7 +51,7 @@ std::ostream & operator<<(std::ostream& o, RemoteFSM const &state)
 
 void RemoteErrorHandler(EventWithId const &evt)
 {
-    std::cerr << "Error : received " << evt << " in state" << *RemoteFSM::current_state_ptr << std::endl;
+    BOOST_LOG_TRIVIAL(error) << "Error : received " << evt << " in state " << *RemoteFSM::current_state_ptr << std::endl;
 }
 
 template<>
@@ -91,7 +91,7 @@ void AvailabilityCommandReceived::react (EventWithId const &evt)
 
 void AvailabilityCommandReceived::entry (void)
 {
-    //std::cout << TimeLogger::now().count() << " # Sending RACK" << std::endl;
+    BOOST_LOG_TRIVIAL(trace) << "Sending RACK" << std::endl;
     SendByte(RemoteAck_id);
     TimerBasedState<RemoteStateId_t>::entry();
 }
@@ -114,7 +114,7 @@ void ThroughputCommandReceived::react (EventWithId const &evt)
 
 void ThroughputCommandReceived::entry (void)
 {
-    //std::cout << TimeLogger::now().count() << " # Sending RACK" << std::endl;
+    BOOST_LOG_TRIVIAL(trace) << "Sending RACK" << std::endl; 
     SendByte(RemoteAck_id);
     TimerBasedState<RemoteStateId_t>::entry();
 }
@@ -186,7 +186,7 @@ void EndModeReceived::react (EventWithId const &evt)
 
 void EndModeReceived::entry (void)
 {
-    //std::cout << TimeLogger::now().count() << " # Sending RACK" << std::endl;
+    BOOST_LOG_TRIVIAL(trace) << "Sending RACK" << std::endl; 
     SendByte(RemoteAck_id);
     TimerBasedState<RemoteStateId_t>::entry();
 }

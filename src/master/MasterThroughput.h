@@ -27,14 +27,17 @@
 #include "../AISO.h"
 #include "../CommunicatingRunnableFactory.h"
 #include "../Events.h"
-#include "../TimeLogger.h"
+#include "../time_def.h"
 #include "../ReportingActivity.h"
 
 using ThroughputReportFunctionType = std::function<void(bool,uint32_t,uint32_t)>;
 
 class MasterThroughput : public ReportingActivity<ThroughputReportFunctionType> {
 public:
-    explicit MasterThroughput (AISOBase *ioStream,TheClock::duration pingStatusReportPeriod = std::chrono::seconds(0),ThroughputReportFunctionType reportFunction=&noReportingFunction);
+    MasterThroughput (AISOBase *ioStream,
+        TheClock::duration pingStatusReportPeriod = std::chrono::seconds(0),
+        ThroughputReportFunctionType reportFunction=&noReportingFunction,
+        uint32_t estimatedThroughput = 9600);
 
     ~MasterThroughput () override = default;
 
@@ -56,21 +59,25 @@ protected:
     uint32_t _totalReceived;
     uint32_t _totalUsec;
     boost::asio::basic_waitable_timer<TheClock> *_receiveResultsTimer;
+    uint32_t _estimatedThroughput; /**< In bits/s */
 };
 
 class MasterThroughputFactory : public CommunicatingRunnableFactory<MasterThroughput> {
 public:
     explicit MasterThroughputFactory (AISOBase *ioStream);
 
-    static const TheClock::duration &getPingStatusPrintPeriod ();
+    static const TheClock::duration &getThroughputResultPrintPeriod ();
+    static const uint32_t getEstimatedThroughput ();
 
-    static void setPingStatusPrintPeriod (const TheClock::duration &pingStatusPrintPeriod);
+    static void setThroughputResultPrintPeriod (const TheClock::duration &throughputResultPrintPeriod);
     static void setReportingFunction (const ThroughputReportFunctionType &reportingFunction);
+    static void setEstimatedThroughput (const uint32_t &estimatedThroughput);
 
     MasterThroughput* operator()() override;
 protected:
-    static TheClock::duration _pingStatusPrintPeriod;
+    static TheClock::duration _throughputResultPrintPeriod;
     static ThroughputReportFunctionType _reportingFunction;
+    static uint32_t _estimatedThroughput;
 };
 
 #endif //MODEMTESTER_MASTERTHROUGHPUT_H

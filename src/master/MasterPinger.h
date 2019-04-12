@@ -26,14 +26,14 @@
 #include "../Runnable.h"
 #include "../AISO.h"
 #include "../CommunicatingRunnableFactory.h"
-#include "../TimeLogger.h"
+#include "../time_def.h"
 #include "../ReportingActivity.h"
 
-using AvailabilityReportFunctionType = std::function<void(unsigned long,unsigned long,unsigned long,double)>;
+using AvailabilityReportFunctionType = std::function<void(bool,unsigned long,unsigned long,unsigned long,double)>;
 
 class MasterPinger : public ReportingActivity<AvailabilityReportFunctionType> {
 public:
-    explicit MasterPinger (AISOBase *ioStream,TheClock::duration pingStatusReportPeriod = std::chrono::seconds(0),std::function<void(unsigned long,unsigned long,unsigned long,double)> reportFunction=&noReportingFunction);
+    explicit MasterPinger (AISOBase *ioStream,TheClock::duration pingStatusReportPeriod = std::chrono::seconds(0),AvailabilityReportFunctionType reportFunction=&noReportingFunction);
 
     ~MasterPinger() override=default;
 
@@ -48,14 +48,15 @@ public:
     void printStats () const;
 
     void makeReport () override final;
-    static void noReportingFunction(unsigned long sent,unsigned long lost,unsigned long received,double avRtt);
-
+    static void noReportingFunction(bool,unsigned long sent,unsigned long lost,unsigned long received,double avRtt);
+    bool isReachable () const;
 protected:
     std::array<uint8_t, 10> _recvBuf;
     unsigned long _sent;
     unsigned long _lost;
     unsigned long _received;
     double _rtt;
+    bool _reachable;
     std::map<uint8_t,TheClock::time_point> _sendTimes;
     boost::asio::basic_waitable_timer<TheClock> *_reportStatsTimer;
     TheClock::duration _pingStatusReportPeriod;
@@ -69,12 +70,12 @@ public:
     static const TheClock::duration &getPingStatusPrintPeriod ();
 
     static void setPingStatusPrintPeriod (const TheClock::duration &pingStatusPrintPeriod);
-    static void setReportingFunction (const std::function<void (unsigned long, unsigned long, unsigned long, double)> &reportingFunction);
+    static void setReportingFunction (const AvailabilityReportFunctionType &reportingFunction);
 
     MasterPinger* operator()() override;
 protected:
     static TheClock::duration _pingStatusPrintPeriod;
-    static std::function<void(unsigned long,unsigned long,unsigned long,double)> _reportingFunction;
+    static AvailabilityReportFunctionType _reportingFunction;
 };
 
 #endif //MODEMTESTER_MASTERAVAILABILITY_H

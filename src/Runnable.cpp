@@ -21,7 +21,7 @@
 #include <iostream>
 #include <unistd.h>
 #include "Runnable.h"
-#include "TimeLogger.h"
+#include "time_def.h"
 
 Runnable::Runnable () : _running(false), _thr(nullptr), _stopRequested(false) {}
 

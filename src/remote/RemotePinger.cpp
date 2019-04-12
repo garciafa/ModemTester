@@ -23,7 +23,7 @@
 
 #include <iostream>
 #include "RemotePinger.h"
-#include "../TimeLogger.h"
+#include "../time_def.h"
 #include "../Events.h"
 #include "RemoteFSM.h"
 

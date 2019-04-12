@@ -29,8 +29,9 @@
 #include "tinyfsm.hpp"
 #include "Runnable.h"
 #include "AISO.h"
-#include "TimeLogger.h"
+#include "time_def.h"
 #include "Events.h"
+#include "logging.h"
 
 inline void defaultErrorHandler(EventWithId const &evt)
 {
@@ -134,7 +135,7 @@ TheClock::duration BaseFSM<State_t>::_timeout=std::chrono::seconds(1);
 template<typename State_t>
 void BaseFSM<State_t>::entry(void)
 {
-    //std::cout << TimeLogger::now().count() << " => entry in " << *BaseFSM<State_t>::current_state_ptr << " state\n";
+    BOOST_LOG_TRIVIAL(trace) << "Entry in " << *BaseFSM<State_t>::current_state_ptr << " state\n";
     AISOBase * ioStream = getIoStream();
     assert(ioStream!= nullptr);
     ioStream->async_read_some(boost::asio::buffer(_recvBuf,1),std::bind(&BaseFSM<State_t>::HandleReadEvt,this,_1,_2));
@@ -145,11 +146,11 @@ void BaseFSM<State_t>::exit(void)
 {
     boost::system::error_code ec;
 
-    //std::cout << TimeLogger::now().count() << " <= exit of " << *BaseFSM<State_t>::current_state_ptr << " state\n";
+    BOOST_LOG_TRIVIAL(debug) << "Exit of " << *BaseFSM<State_t>::current_state_ptr << " state\n";
     getIoStream()->cancel(ec);
     if (ec)
     {
-        std::cerr << "Error canceling async io on stream \n";
+        BOOST_LOG_TRIVIAL(error)  << "Error canceling async io on stream \n";
     }
 }
 
@@ -192,7 +193,7 @@ void BaseFSM<State_t>::HandleReadEvt(boost::system::error_code const &ec,std::si
     {
         if (ec.value()!=125)
         {
-            std::cerr << "Error reading from stream : " << ec.message() << std::endl;
+            BOOST_LOG_TRIVIAL(fatal) << "Error reading from stream : " << ec.message() << std::endl;
             ::exit(EXIT_FAILURE);
         }
     }
@@ -200,7 +201,7 @@ void BaseFSM<State_t>::HandleReadEvt(boost::system::error_code const &ec,std::si
     {
         for (size_t i = 0; i < bytesTransferred; ++i)
         {
-            //std::cout << TimeLogger::now().count() << " # received " << (EventId_t)_recvBuf[i] << std::endl;
+            BOOST_LOG_TRIVIAL(trace)  << "received " << (EventId_t)_recvBuf[i] << std::endl;
             switch (_recvBuf[i])
             {
                 case AvailabilityModeCommand_id:
@@ -223,7 +224,7 @@ void BaseFSM<State_t>::HandleReadEvt(boost::system::error_code const &ec,std::si
                     break;
                 default:
                     // This should not occur...
-                    std::cout << TimeLogger::now().count() << " # STRANGE THING OCCURED : Received "
+                    BOOST_LOG_TRIVIAL(error) << "STRANGE THING OCCURED : Received "
                               << (int) _recvBuf[i] << " while in "
                               << *BaseFSM<State_t>::current_state_ptr << " state" << std::endl;
 
@@ -248,7 +249,7 @@ template<typename State_t>
 void BaseFSM<State_t>::react (EndTest const &e)
 {
     SendByte(EndTest_id);
-    std::cout << TimeLogger::now().count() << " # Received an EndTest event, stopping.\n";
+    BOOST_LOG_TRIVIAL(info) << "Received an EndTest event, stopping.\n";
     ::exit(EXIT_SUCCESS);
 }
 
@@ -259,7 +260,7 @@ void TimerBasedState<State_t>::dispatchTimeout (boost::system::error_code const 
     _timer = nullptr;
     if (!ec)
     {
-        //std::cout << TimeLogger::now().count() << " # Timeout occured\n";
+        BOOST_LOG_TRIVIAL(trace) << "Timeout occured\n";
         BaseFSM<State_t>::dispatch(Timeout());
     }
 }
@@ -269,8 +270,7 @@ void TimerBasedState<State_t>::startTimer (TheClock::duration const &d)
 {
     if (_timer==nullptr)
     {
-        //std::cout << TimeLogger::now().count() << " # starting timer\n";
-        //std::cout << "Timeout : " << std::chrono::duration_cast<std::chrono::duration<double>>(d).count() << " s" << std::endl;
+        BOOST_LOG_TRIVIAL(trace) << "starting timer\n";
         _timer = new boost::asio::basic_waitable_timer<TheClock>(BaseFSM<State_t>::getIoStream()->get_io_service(), d);
         _timer->async_wait(std::bind(&TimerBasedState<State_t>::dispatchTimeout, this, _1));
     }
@@ -281,7 +281,7 @@ void TimerBasedState<State_t>::cancelTimer()
 {
     if (_timer!= nullptr)
     {
-        //std::cout << TimeLogger::now().count() << " # Canceling timer\n";
+        BOOST_LOG_TRIVIAL(trace)  << "Canceling timer\n";
         _timer->cancel();
         delete(_timer);
         _timer= nullptr;

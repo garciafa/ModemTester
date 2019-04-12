@@ -21,11 +21,12 @@
 #define MODEMTESTER_EVENTSSCRIPT_H
 
 #include "Events.h"
-#include "TimeLogger.h"
+#include "time_def.h"
 #include "RunnablePool.h"
 #include <map>
 #include <iostream>
 #include <boost/asio.hpp>
+#include "DispatchingRunnable.h"
 
 template<typename FSM, typename ClockType = TheClock>
 class EventsScript : public std::map<typename ClockType::duration,EventId_t> {
@@ -49,24 +50,14 @@ protected:
     void dispatchEventFromId(EventId_t const & id);
     std::map<typename ClockType::time_point,timer*> _timers;
     bool _cyclic;
-    RunnablePool _runPool;
-};
-
-template <typename E>
-class DispatchingRunnable : public Runnable {
-public:
-    void operator()() override
-    {
-        E e;
-        MasterFSM::dispatch(E());
-    }
+    RunnablePool *_runPool;
 };
 
 template<typename FSM, typename ClockType>
 template<typename E>
 void EventsScript<FSM, ClockType>::dispatchInThread ()
 {
-    _runPool.addAndStartRunnable(new DispatchingRunnable<E>());
+    _runPool->addAndStartRunnable(new DispatchingRunnable<MasterFSM,E>());
 }
 
 template<typename FSM, typename DurationType>
@@ -101,7 +92,10 @@ void EventsScript<FSM,DurationType>::dispatchEventFromId (EventId_t const &id)
 }
 
 template<typename FSM, typename DurationType>
-EventsScript<FSM,DurationType>::EventsScript (boost::asio::io_service &io, bool cyclic):_io(io),_cyclic(cyclic),_runPool() {}
+EventsScript<FSM,DurationType>::EventsScript (boost::asio::io_service &io, bool cyclic):_io(io),_cyclic(cyclic)
+{
+    _runPool=RunnablePool::getInstance();
+}
 
 using std::placeholders::_1;
 
@@ -156,7 +150,7 @@ void EventsScript<FSM,ClockType>::stopScript ()
 template<typename FSM, typename ClockType>
 void EventsScript<FSM,ClockType>::handleTimer (boost::system::error_code const &ec, EventId_t const &id)
 {
-    std::cout << TimeLogger::now().count() << " ===> Script dispatching event " << id << std::endl;
+    BOOST_LOG_TRIVIAL(info) << "Script dispatching event " << id << std::endl;
     if (!ec)
     {
         dispatchEventFromId(id);
@@ -168,7 +162,7 @@ void EventsScript<FSM, ClockType>::restartScript (boost::system::error_code cons
 {
     if (!ec)
     {
-        std::cout << TimeLogger::now().count() << " # Script restarting" << std::endl;
+        BOOST_LOG_TRIVIAL(info) << "Script restarting" << std::endl;
         startScript();
     }
 }

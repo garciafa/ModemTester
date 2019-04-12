@@ -30,7 +30,9 @@
 using std::placeholders::_1;
 using std::placeholders::_2;
 
-std::function<void(unsigned long,unsigned long,unsigned long,double)> MasterPingerFactory::_reportingFunction=&MasterPinger::noReportingFunction;
+AvailabilityReportFunctionType MasterPingerFactory::_reportingFunction=&MasterPinger::noReportingFunction;
+
+#define AVAIL_THRESHOLD 3
 
 void MasterPinger::operator() ()
 {
@@ -54,12 +56,22 @@ void MasterPinger::operator() ()
     while (!_stopRequested)
     {
         _ioStream->write(boost::asio::buffer(sendBuf,1));
-        //std::cout << TimeLogger::now().count() << " # Sent " << (int)byte << std::endl;
+        BOOST_LOG_TRIVIAL(trace) << "Sent " << (int)byte << std::endl;
         _sent++;
         _sendTimes[byte]=TheClock::now();
         byte= (uint8_t)((byte+1-BeginStandardCodes)%nbCodes+BeginStandardCodes);
-        timer.expires_from_now(std::chrono::milliseconds(500));
+        timer.expires_from_now(std::chrono::milliseconds(100)); // 10 Hz
         timer.wait();
+        // consider the remote reachable if less than THRESHOLD packets are in flight
+        if (_sent - (_received+_lost) > AVAIL_THRESHOLD)
+        {
+            _reachable=false;
+        }
+        else
+        {
+            _reachable=true;
+        }
+
     }
     usleep(1000000*getAverageRtt()); // Allow for last packet to arrive
 
@@ -69,8 +81,8 @@ void MasterPinger::operator() ()
     //printStats();
 }
 
-MasterPinger::MasterPinger (AISOBase *ioStream,TheClock::duration pingStatusReportPeriod,std::function<void(unsigned long,unsigned long,unsigned long,double)> reportFunction)
-: ReportingActivity<AvailabilityReportFunctionType>(ioStream,pingStatusReportPeriod,reportFunction), _sent(0), _lost(0), _received(0), _rtt(0.0), _pingStatusReportPeriod(pingStatusReportPeriod), _reportingFunction(reportFunction)
+MasterPinger::MasterPinger (AISOBase *ioStream,TheClock::duration pingStatusReportPeriod,AvailabilityReportFunctionType reportFunction)
+: ReportingActivity<AvailabilityReportFunctionType>(ioStream,pingStatusReportPeriod,reportFunction), _sent(0), _lost(0), _received(0), _rtt(0.0), _reachable(false), _pingStatusReportPeriod(pingStatusReportPeriod), _reportingFunction(reportFunction)
 {}
 
 void MasterPinger::handleReceive (boost::system::error_code const &ec, std::size_t bytesAvailable)
@@ -85,7 +97,7 @@ void MasterPinger::handleReceive (boost::system::error_code const &ec, std::size
 
             if (byte >= BeginStandardCodes && byte <= EndStandardCodes)
             {
-                //std::cout << TimeLogger::now().count() << " # Received " << (int)byte << std::endl;
+                BOOST_LOG_TRIVIAL(trace) << "Received " << (int)byte << std::endl;
                 auto it = _sendTimes.find(byte);
                 if (it!=_sendTimes.end())
                 {
@@ -151,13 +163,13 @@ double MasterPinger::getAverageRtt () const
 
 void MasterPinger::printStats () const
 {
-    std::cout << "----------------------------------------------" << std::endl;
-    std::cout << TimeLogger::now().count() << " # AvailabilityMode report" << std::endl;
-    std::cout << "\tSent " << _sent << " bytes\n";
-    std::cout << "\tReceived " << _received << " bytes\n";
-    std::cout << "\tLost " << _lost << " bytes\n";
-    std::cout << "\tAvRTT " << getAverageRtt()*1000 << " ms\n";
-    std::cout << "----------------------------------------------" << std::endl;
+    BOOST_LOG_TRIVIAL(info) << "\n----------------------------------------------" << std::endl
+    << "AvailabilityMode report" << std::endl
+    << "\tSent " << _sent << " bytes\n"
+    << "\tReceived " << _received << " bytes\n"
+    << "\tLost " << _lost << " bytes\n"
+    << "\tAvRTT " << getAverageRtt()*1000 << " ms\n"
+    << "----------------------------------------------" << std::endl;
 }
 
 unsigned long MasterPinger::getSent () const
@@ -165,11 +177,11 @@ unsigned long MasterPinger::getSent () const
     return _sent;
 }
 
-void MasterPinger::noReportingFunction (unsigned long sent,unsigned long lost,unsigned long received,double avRtt){}
+void MasterPinger::noReportingFunction (bool reachable,unsigned long sent,unsigned long lost,unsigned long received,double avRtt){}
 
 void MasterPinger::makeReport ()
 {
-    _reportingFunction(_sent,_lost,_received,getAverageRtt());
+    _reportingFunction(_reachable,_sent,_lost,_received,getAverageRtt());
 }
 
 TheClock::duration MasterPingerFactory::_pingStatusPrintPeriod = std::chrono::seconds(0);
@@ -193,7 +205,7 @@ MasterPingerFactory::MasterPingerFactory (AISOBase *ioStream)
     : CommunicatingRunnableFactory(ioStream)
     {}
 
-void MasterPingerFactory::setReportingFunction (const std::function<void (unsigned long, unsigned long, unsigned long, double)> &reportingFunction)
+void MasterPingerFactory::setReportingFunction (const AvailabilityReportFunctionType &reportingFunction)
 {
     _reportingFunction = reportingFunction;
 }

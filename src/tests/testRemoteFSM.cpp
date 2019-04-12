@@ -30,7 +30,8 @@
 #include <functional>
 #include <boost/asio.hpp>
 #include "../remote/RemoteFSM.h"
-#include "../TimeLogger.h"
+#include "../time_def.h"
+#include "../logging.h"
 
 FSM_INITIAL_STATE(RemoteFSM,RemoteIdle);
 
@@ -42,13 +43,14 @@ boost::asio::basic_waitable_timer<TheClock> *printTimer;
 
 void printState(boost::system::error_code const & ec)
 {
-    std::cout << TimeLogger::now().count() << " # Current state : " << *RemoteFSM::current_state_ptr << std::endl;
+    BOOST_LOG_TRIVIAL(info) << "Current state : " << *RemoteFSM::current_state_ptr << std::endl;
     printTimer->expires_from_now(std::chrono::seconds(2));
     printTimer->async_wait(&printState);
 }
 
 int main()
 {
+    setLogLevel(logging::trivial::severity_level::trace);
     try
     {
         io_service io;

@@ -22,7 +22,7 @@
 
 #include <chrono>
 #include "Runnable.h"
-#include "TimeLogger.h"
+#include "time_def.h"
 #include <boost/asio.hpp>
 
 template <typename ReportFunctionType>

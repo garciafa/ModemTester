@@ -21,6 +21,8 @@
 #include <unistd.h>
 #include <iostream>
 
+RunnablePool* RunnablePool::_instance=nullptr;
+
 void RunnablePool::addAndStartRunnable (Runnable *runnable)
 {
     std::lock_guard<std::mutex> lock(_mut);
@@ -64,4 +66,13 @@ void RunnablePool::operator() ()
         }
         sleep(1);
     }
+}
+
+RunnablePool *RunnablePool::getInstance ()
+{
+    if (_instance==nullptr)
+    {
+        _instance=new RunnablePool();
+    }
+    return _instance;
 }

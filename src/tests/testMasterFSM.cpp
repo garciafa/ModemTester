@@ -25,8 +25,10 @@
 #include <iostream>
 #include <functional>
 #include "../master/MasterFSM.h"
-#include "../TimeLogger.h"
+#include "../time_def.h"
 #include "../EventsScript.h"
+#include "../logging.h"
+#include <Ivy/Ivycpp.h>
 
 FSM_INITIAL_STATE(MasterFSM,Idle);
 
@@ -41,53 +43,77 @@ constexpr auto printStatusPeriod = std::chrono::seconds(1);
 void printState(boost::system::error_code const & ec)
 {
     printTimer->expires_from_now(printStatusPeriod);
-    std::cout << TimeLogger::now().count() << " # Current state : " << *MasterFSM::current_state_ptr << std::endl;
+    BOOST_LOG_TRIVIAL(info) << "Current state : " << *MasterFSM::current_state_ptr << std::endl;
     printTimer->async_wait(&printState);
 }
 
-void AvailabilityReportingFunction(unsigned long sent,unsigned long lost,unsigned long received,double avRtt)
+void AvailabilityReportingFunction(Ivy &bus, unsigned long sent,unsigned long lost,unsigned long received,double avRtt)
 {
-    std::cout << "----------------------------------------------" << std::endl;
-    std::cout << TimeLogger::now().count() << " # AvailabilityMode report" << std::endl;
-    std::cout << "\tSent " << sent << " bytes\n";
-    std::cout << "\tReceived " << received << " bytes\n";
-    std::cout << "\tLost " << lost << " bytes\n";
-    std::cout << "\tAvRTT " << avRtt*1000 << " ms\n";
-    std::cout << "----------------------------------------------" << std::endl;
+    BOOST_LOG_TRIVIAL(info) << "\n----------------------------------------------\n"
+                            << "AvailabilityMode report\n"
+                            << "\tSent " << sent << " bytes\n"
+                            << "\tReceived " << received << " bytes\n"
+                            << "\tLost " << lost << " bytes\n"
+                            << "\tAvRTT " << avRtt * 1000 << " ms\n"
+                            << "----------------------------------------------" << std::endl;
+    bus.SendMsg("ground AVAIL_REPORT %ld %ld %ld %g",sent,lost,received,1000*avRtt);
 }
 
-void ThroughputReportingFunction(bool valid,uint32_t received, uint32_t usecs)
+void ThroughputReportingFunction(Ivy &bus, bool valid,uint32_t received, uint32_t usecs)
 {
     double sec = usecs / 1000000.0;
-    std::cout << "----------------------------------------------" << std::endl;
-    std::cout << TimeLogger::now().count() << " # ThroughputMode report" << std::endl;
-    std::cout << "\tReceived " << received << " Bytes in " << sec << " s" << std::endl;
-    std::cout << "\tThroughput " << received / sec << " Bytes/s" << std::endl;
-    std::cout << "\tThroughput " << 8 * received / sec << " b/s" << std::endl;
-    std::cout << "----------------------------------------------" << std::endl;
+    BOOST_LOG_TRIVIAL(info) << "\n----------------------------------------------" << std::endl
+                            << "ThroughputMode report" << std::endl
+                            << "\tReceived " << received << " Bytes in " << sec << " s" << std::endl
+                            << "\tThroughput " << received / sec << " Bytes/s" << std::endl
+                            << "\tThroughput " << 8 * received / sec << " b/s" << std::endl
+                            << "----------------------------------------------" << std::endl;
+    bus.SendMsg("ground THROUGHPUT_REPORT %d %d",received,usecs);
+}
 
+void runBoostMainLoop(io_service &io)
+{
+    BOOST_LOG_TRIVIAL(info) << "In thread\n";
+
+    unsigned long res = 1;
+
+    while (res)
+    {
+        res = io.run_one();
+    }
 }
 
 using std::chrono::seconds;
 
 int main()
 {
+    setLogLevel(logging::trivial::severity_level::trace);
     try
     {
         io_service io;
 
-        MasterPingerFactory::setPingStatusPrintPeriod(seconds(0));
-        MasterPingerFactory::setReportingFunction(AvailabilityReportingFunction);
-        MasterThroughputFactory::setPingStatusPrintPeriod(seconds(0));
-        MasterThroughputFactory::setReportingFunction(ThroughputReportingFunction);
+        Ivy bus("ModemTester","Ready",new IvyApplicationNullCallback(),0);
 
-        EventsScript<MasterFSM> eventsScript(io,true);
+        bus.start("127.255.255.255:2010");
+
+        using std::placeholders::_1;
+        using std::placeholders::_2;
+        using std::placeholders::_3;
+        using std::placeholders::_4;
+
+        MasterPingerFactory::setPingStatusPrintPeriod(seconds(1));
+        MasterPingerFactory::setReportingFunction(std::bind(AvailabilityReportingFunction,bus,_1,_2,_3,_4));
+        MasterThroughputFactory::setThroughputResultPrintPeriod(seconds(0));
+        MasterThroughputFactory::setReportingFunction(std::bind(ThroughputReportingFunction,bus,_1,_2,_3));
+        MasterThroughputFactory::setEstimatedThroughput(5000);
+
+        EventsScript<MasterFSM> eventsScript(io, true);
         auto deadline = seconds(0);
-        eventsScript[deadline+=seconds(1)] = AvailabilityModeCommand_id;
-        eventsScript[deadline+=seconds(20)] = EndModeCommand_id;
-        eventsScript[deadline+=seconds(1)] = ThroughputModeCommand_id;
-        eventsScript[deadline+=seconds(5)] = EndModeCommand_id;
-        eventsScript[deadline+=seconds(1)] = EndTest_id;
+        eventsScript[deadline += seconds(1)] = AvailabilityModeCommand_id;
+        eventsScript[deadline += seconds(20)] = EndModeCommand_id;
+        eventsScript[deadline += seconds(2)] = ThroughputModeCommand_id;
+        eventsScript[deadline += seconds(5)] = EndModeCommand_id;
+        eventsScript[deadline += seconds(2)] = EndTest_id;
 
         tcp::socket socket(io);
         tcp::acceptor acceptor(io, tcp::endpoint(tcp::v4(), 2020));
@@ -96,21 +122,25 @@ int main()
 
         AISOBase *ptr = AISOBase::CreateFromStream(socket);
 
-        TimeLogger::reset();
         MasterFSM::setIoStream(ptr);
         MasterFSM::start();
+
         eventsScript.startScript();
 
-        unsigned long res=1;
+        BOOST_LOG_TRIVIAL(info) << "Starting print timer\n";
         printTimer = new boost::asio::basic_waitable_timer<TheClock>(ptr->get_io_service(), printStatusPeriod);
         printTimer->async_wait(&printState);
 
-        while (res)
-            res=io.run_one();
+        BOOST_LOG_TRIVIAL(info) << "Starting thread\n";
+        std::thread thr(std::bind(&runBoostMainLoop,std::ref(io)));
+
+        BOOST_LOG_TRIVIAL(info) << "Starting ivy main loop\n";
+        bus.ivyMainLoop();
+        bus.stop();
     }
     catch (std::exception &e)
     {
-        std::cerr << "Error in main loop : " << e.what() << std::endl;
+        BOOST_LOG_TRIVIAL(error) << "Error in main loop : " << e.what() << std::endl;
     }
     return EXIT_SUCCESS;
 }

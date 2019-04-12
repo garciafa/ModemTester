@@ -25,7 +25,7 @@
 
 #include "../Runnable.h"
 #include "../CommunicatingRunnableFactory.h"
-#include "../TimeLogger.h"
+#include "../time_def.h"
 
 class RemoteThroughput : public Runnable {
 public:

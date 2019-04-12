@@ -23,7 +23,7 @@
 
 #include "RemoteThroughput.h"
 #include <iostream>
-#include "../TimeLogger.h"
+#include "../time_def.h"
 #include "../Events.h"
 #include "RemoteFSM.h"
 
@@ -67,7 +67,7 @@ void RemoteThroughput::handleReceive (boost::system::error_code const &ec, std::
                             RemoteFSM::dispatch(EndModeCommand());
                             return;
                         default:
-                            std::cout << TimeLogger::now().count() << " # Got " << (EventId_t) _recvBuf[i]
+                            BOOST_LOG_TRIVIAL(warning) << "Got " << (EventId_t) _recvBuf[i]
                                       << " in RemoteThroughputMode" << std::endl;
                     }
                 }
@@ -95,7 +95,7 @@ RemoteThroughput::RemoteThroughput (AISOBase *ioStream) : _ioStream(ioStream) {}
 
 void RemoteThroughput::sendResults ()
 {
-    std::cout << TimeLogger::now().count() << " # Sending results" << std::endl;
+    BOOST_LOG_TRIVIAL(debug) << "Sending results" << std::endl;
 
     uint32_t totalReceived=0;
     uint32_t totalUsec=0; // Enough for more than one hour
@@ -125,12 +125,12 @@ void RemoteThroughput::sendResults ()
         sendBuf[i]=*ptr++;
     }
     _ioStream->write(boost::asio::buffer(sendBuf));
-    std::cout << "Sent " << sendBuf.size() << " Bytes" << std::endl;
+    BOOST_LOG_TRIVIAL(debug) << "Sent " << sendBuf.size() << " Bytes" << std::endl;
     double sec = totalUsec/1000000.0;
-    std::cout << "----------------------------------------------" << std::endl;
-    std::cout << TimeLogger::now().count() << std::endl;
-    std::cout << "\tReceived " << totalReceived << " Bytes in " << sec << " s" << std::endl;
-    std::cout << "\tThroughput " << totalReceived/sec << " Bytes/s" << std::endl;
-    std::cout << "\tThroughput " << 8*totalReceived/sec << " b/s" << std::endl;
-    std::cout << "----------------------------------------------" << std::endl;
+    BOOST_LOG_TRIVIAL(debug) << "\n----------------------------------------------" << std::endl;
+    BOOST_LOG_TRIVIAL(debug) << std::endl;
+    BOOST_LOG_TRIVIAL(debug) << "\tReceived " << totalReceived << " Bytes in " << sec << " s" << std::endl;
+    BOOST_LOG_TRIVIAL(debug) << "\tThroughput " << totalReceived/sec << " Bytes/s" << std::endl;
+    BOOST_LOG_TRIVIAL(debug) << "\tThroughput " << 8*totalReceived/sec << " b/s" << std::endl;
+    BOOST_LOG_TRIVIAL(debug) << "----------------------------------------------" << std::endl;
 }
