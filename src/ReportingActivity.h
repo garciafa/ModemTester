@@ -24,7 +24,7 @@
 #include "Runnable.h"
 #include "time_def.h"
 #include <boost/asio.hpp>
-
+#include <iostream>
 template <typename ReportFunctionType>
 class ReportingActivity : public Runnable {
 public:
@@ -56,6 +56,8 @@ template <typename ReportFunctionType>
 void ReportingActivity<ReportFunctionType>::handleTimerReportStats (boost::system::error_code const &ec)
 {
     using std::placeholders::_1;
+    std::cout << "Handling\n";
+
     if (!ec)
     {
         makeReport();
@@ -90,7 +92,10 @@ template<typename ReportFunctionType>
 void ReportingActivity<ReportFunctionType>::endReporting ()
 {
     if (_reportStatsTimer!= nullptr)
+    {
         _reportStatsTimer->cancel();
+        delete _reportStatsTimer;
+    }
 }
 
 #endif //MODEMTESTER_REPORTINGACTIVITY_H

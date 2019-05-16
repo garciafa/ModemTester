@@ -36,8 +36,16 @@ FSM_INITIAL_STATE(MasterFSM,Idle);
 
 void ThroughputReportingFunction(Ivy &bus,MasterController &control,  bool valid,uint32_t received, uint32_t usecs);
 void AvailabilityReportingFunction(Ivy &bus,MasterController &control, bool reachable, unsigned long sent,unsigned long lost,unsigned long received,double avRtt);
+void SimpleAvailabilityReportingFunction(Ivy &bus, bool reachable, unsigned long sent,unsigned long lost,unsigned long received,double avRtt);
 
 void runBoostMainLoop(io_service &io);
+
+boost::asio::basic_waitable_timer<TheClock> *timer;
+void handle (boost::system::error_code const&ec)
+{
+    timer->expires_from_now(std::chrono::seconds(1));
+    timer->async_wait(&handle);
+}
 
 int main (int argc,char** argv)
 {
@@ -149,21 +157,34 @@ int main (int argc,char** argv)
 
             AISOBase *ptr = AISOBase::CreateFromStream(serialPort);
 
-            MasterController control(ptr);
+            //MasterController control(ptr);
 
+            MasterPingerFactory fact(ptr);
             MasterPingerFactory::setPingStatusPrintPeriod(seconds(1));
-            MasterPingerFactory::setReportingFunction(std::bind(AvailabilityReportingFunction,std::ref(bus),std::ref(control),_1,_2,_3,_4,_5));
+            MasterPingerFactory::setReportingFunction(std::bind(SimpleAvailabilityReportingFunction,std::ref(bus),_1,_2,_3,_4,_5));
+            /*
             MasterThroughputFactory::setThroughputResultPrintPeriod(seconds(0));
             MasterThroughputFactory::setReportingFunction(std::bind(ThroughputReportingFunction,std::ref(bus),std::ref(control),_1,_2,_3));
             MasterThroughputFactory::setEstimatedThroughput(5000);
+            */
 
-            MasterFSM::setIoStream(ptr);
-            MasterFSM::start();
-            control.start();
+            MasterPinger * pinger = fact();
+
+            pinger->start();
+
+            //MasterFSM::setIoStream(ptr);
+            //MasterFSM::start();
+            //control.start();
+
+            timer = new boost::asio::basic_waitable_timer<TheClock>(io);
+            timer->expires_from_now(std::chrono::seconds(1));
+            timer->async_wait(&handle);
 
             std::thread thr(std::bind(&runBoostMainLoop,std::ref(io)));
 
             bus.ivyMainLoop();
+
+            pinger->stop();
             bus.stop();
             thr.join();
         }
@@ -190,6 +211,19 @@ void AvailabilityReportingFunction(Ivy &bus, MasterController &control, bool rea
                             << "----------------------------------------------" << std::endl;
     bus.SendMsg("ground AVAIL_REPORT %d %ld %ld %ld %02.2f",(reachable?1:0),sent,lost,received,avRtt*1000);
     control.setRemoteReachability(reachable);
+}
+
+void SimpleAvailabilityReportingFunction(Ivy &bus, bool reachable, unsigned long sent,unsigned long lost,unsigned long received,double avRtt)
+{
+    BOOST_LOG_TRIVIAL(info) << "\n----------------------------------------------\n"
+                            << "AvailabilityMode report\n"
+                            << "\tReachable " << (reachable?"yes":"no") << "\n"
+                            << "\tSent " << sent << " bytes\n"
+                            << "\tReceived " << received << " bytes\n"
+                            << "\tLost " << lost << " bytes\n"
+                            << "\tAvRTT " << avRtt * 1000 << " ms\n"
+                            << "----------------------------------------------" << std::endl;
+    bus.SendMsg("ground AVAIL_REPORT %d %ld %ld %ld %02.2f",(reachable?1:0),sent,lost,received,avRtt*1000);
 }
 
 void ThroughputReportingFunction(Ivy &bus, MasterController &control, bool valid,uint32_t received, uint32_t usecs)

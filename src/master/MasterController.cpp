@@ -30,6 +30,8 @@ void MasterController::periodicAction (boost::system::error_code const & ec)
     {
         case Idle_id:
             // If we are currently idle and the remote is not available, try an availability test
+            // TODO REMOVE THIS LATER AFTER TESTS
+            _remoteReachable = false; // Consider it is not reachable and hence do not do thorughput test
             if (not _remoteReachable)
             {
                 // Only dispatch the signal the first time. After that we wait for the FSM to go in availability mode
@@ -56,8 +58,8 @@ void MasterController::periodicAction (boost::system::error_code const & ec)
             {
                 // We were starting an availability check, do that for 20 seconds
                 _tryingAvalability=false;
-                BOOST_LOG_TRIVIAL(info) << "Doing availability test for 20 more seconds" << std::endl;
-                _timer.expires_from_now(std::chrono::seconds(20));
+                BOOST_LOG_TRIVIAL(info) << "Doing availability test for 60 more seconds" << std::endl;
+                _timer.expires_from_now(std::chrono::seconds(60));
                 _timer.async_wait(std::bind(&MasterController::periodicAction, this, _1));
             }
             else
